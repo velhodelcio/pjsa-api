@@ -1,7 +1,31 @@
+# A API usa sempre postgres:5432 na rede interna.
+# POSTGRES_PORT no .env é só o mapeamento no host (ex.: 5433 se a 5432 estiver ocupada).
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-pjsa}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pjsa}"
+      POSTGRES_DB: "${POSTGRES_DB:-pjsa}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pjsa_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    networks:
+      - pjsa
+
   api:
     build: .
-    # Código em volume + reload: alterações em app/ refletem-se sem rebuild.
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./app:/app/app
     command:
@@ -19,6 +43,11 @@ services:
     environment:
       APP_NAME: ${APP_NAME:-pjsa-api}
       DEBUG: ${DEBUG:-false}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-pjsa}:${POSTGRES_PASSWORD:-pjsa}@postgres:5432/${POSTGRES_DB:-pjsa}
+      JWT_SECRET: ${JWT_SECRET:-dev-change-me-use-long-secret-in-production}
+      ADMIN_SEED_USERNAME: ${ADMIN_SEED_USERNAME:-admin}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-admin}
+      ADMIN_SEED_FULL_NAME: ${ADMIN_SEED_FULL_NAME:-Administrador}
     healthcheck:
       test:
         [
@@ -30,4 +59,13 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+    networks:
+      - pjsa
+
+networks:
+  pjsa:
+    driver: bridge
+
+volumes:
+  pjsa_pg_data:
